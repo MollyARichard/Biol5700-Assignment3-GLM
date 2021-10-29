@@ -1,0 +1,101 @@
+---
+title: "Assignment 3 Lizard sprint ticks"
+author: Molly Richard
+---
+```{r libraries and dataset, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(arm)
+library(MASS)
+library(ggfortify)
+library(readr)
+library(emmeans)
+
+lizard <- read_csv("lizard_sprint_tick.csv")
+```
+
+**QUESTION 1**: 1.	Is there a relationship between hind limb length (HLL) and sprint performance (Max_25cm or Max_2m)? Is this better described by a traditional linear model (OLS) or by a GLM with some other specified error and 'link' functions?
+
+
+```{r determine distribution}
+ggplot(lizard, aes(x=HLL)) + geom_histogram(binwidth=1, colour="black", fill="white")
+
+boxcox(glm(Max_2m ~ HLL, data = lizard))
+```
+
+Based on the histogram, the data are not normally distibuted leading me to suspect a poisson would be the better choice.
+
+```{r Poission Model}
+lizardpois <- glm(HLL ~ Max_2m, data = lizard, family = poisson(link = log))
+autoplot(lizardpois)
+summary(lizardpois)
+coef(lizardpois)
+```
+
+```{r Gaussian Model}
+lizardgaus <- glm(HLL ~ Max_2m, data = lizard, family = gaussian(link = log))
+autoplot(lizardgaus)
+summary(lizardgaus)
+coef(lizardgaus)
+```
+
+The deviances are much lower on the poisson model (null = 26.745, residual = 21.361) compared to the gaussian model (null = 1108.82, residual = 879.58) taking me to my next step in comparing the poisson to a quasipoisson model. 
+
+
+```{r Quasipoisson Model}
+lizardqpois <- glm(HLL ~ Max_2m, quasipoisson, data= lizard)
+summary(lizardqpois)
+coef(lizardqpois) 
+confint(lizardqpois)
+```
+
+Next step is to compare the summary statistic to find the lower standard errors between a poisson model and a quasipoisson model. The quasipoisson model had lower standard errors (x=0.06087, 0.032230) compared to the poisson model (x=0.09316, 0.04933) leading me to choose the quasipoisson as the best model choice for this data set. 
+
+```{r Linear Model using Quasipoisson Model, warning=FALSE}
+ggplot(lizard, aes(x = HLL , y = Max_2m)) +
+geom_point() +
+geom_smooth(method="glm", method.args=list(family="quasipoisson"(link="log"))) +
+xlab("Hind Limb Length") + ylab("Sprint Speed") +
+  ggtitle("Linear Model = Quasipoisson Error Structure, Log Link")
+```
+The linear model graph shows a positive relationship between hind limb length and spring speed at 2 meters, and is further supports by the intercept (3.554), slope (0.114), and confidence intervals not containing zero. 
+
+
+
+**QUESTION 2**: 2.	Does level of parasitism (#ticks) modify the relationship between hind limb length (HLL) and sprint performance (Max_25cm or Max_2m)?
+
+```{r Graph of }
+ggplot(lizard, aes(x=HLL, y=Max_2m, colour = Ticks))+
+  #scale_color_gradient()+
+  geom_point()+
+  scale_colour_gradientn(colours=rainbow(8))+
+  geom_smooth(method="glm",method.args=list(family="quasipoisson"(link="log")))+
+  ggtitle("Hing Limb Length and Max Sprint Speed at 2 m with Varying Parasitic Loads")
+```
+
+```{r Affects of Ticks}
+ticksglm <- (glm(Max_2m ~ HLL + Ticks + HLL:Ticks, family = quasipoisson(link = log), data= lizard))
+summary(ticksglm)
+coef(ticksglm)
+```
+
+Based on the coefficients from the summary table, the level of parasitism does not affect the relationship between sprint speed and hind limb length (p=0.862).
+
+
+
+**QUESTION 3**: Is sprint speed different between treatments after accounting for both hind limb length (HLL) AND level of parasitism (#ticks)? (hint: use library(emmeans) for pairwise comparisons of covariate-adjusted means)
+```{r Sprint Speed Differences Between Treatments}
+siteglm <- (glm(Max_2m ~ HLL * Ticks + Site, family = quasipoisson(link = log), data= lizard))
+emsite <- emmeans(siteglm, ~Site:HLL)
+pairs(emsite)
+
+plot(emsite)+  
+  ggtitle("Sprint Speed at 2 meters for Treatment Sites")
+```
+
+Sprint speed at 2 meters is significantly different between the new burn and recovery sites (p=0.042). Sprint speed at 2 meters was also marginally signficant between the control and new burn sites (p=0.066).  Biologically this may be worth looking into further as classmates found the 25 cm sprint speed was significant between the control and new burn sites (p=0.0177). Sprint speed at 2 meters was not significantly different from control and recovery sites (p=0.995).
+
+
+
+
+
